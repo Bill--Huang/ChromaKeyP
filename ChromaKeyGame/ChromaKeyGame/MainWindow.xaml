@@ -1,0 +1,14 @@
+﻿<Window x:Class="ChromaKeyGame.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MainWindow" Width="900" Height="700" Loaded="Window_Loaded" Closed="Window_Closed">
+    <Grid>
+        <Canvas>
+            <Image Name="BGImage" Width="400" Height="300" Canvas.Left="30" Canvas.Top="30"/>
+            <Image Name="CameraImage" Width="400" Height="300" Canvas.Right="30" Canvas.Top="30"/>
+            <Image Name="Mask" Width="400" Height="300" Canvas.Left="30" Canvas.Bottom="30"/>
+        </Canvas>
+
+
+    </Grid>
+</Window>

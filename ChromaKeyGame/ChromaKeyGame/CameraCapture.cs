@@ -23,10 +23,11 @@ using System.Threading.Tasks;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
-using Emgu.Util;
-using Emgu.CV.Util;
 using Emgu.CV.VideoSurveillance;
 
+/*
+ * EmguCV: 2.4.10 
+ */
 namespace ChromaKeyGame {
     class CameraCapture {
 
@@ -34,42 +35,55 @@ namespace ChromaKeyGame {
         private bool captureInProgress;
         private Image imageElement;
         private MainWindow mWindow;
-        private int lowHThreshold = 80;
-        private int HighHThresdhold = 120;
+        private int lowHThreshold = 85;
+        private int HighHThresdhold = 155;
         delegate void UpdateImageElementDelegate(BitmapSource temp);
+
+        // Bug: 调试启动的话，内存占用稳定;若运行启动的话，偶尔出现内存飙升并卡死的问题！
+        //      
+        //      
         public CameraCapture(MainWindow w, Image imgE) {
-            CvInvoke.UseOpenCL = false;
+            //CvInvoke.UseOpenCL = false;
             this.mWindow = w;
             this.imageElement = imgE;
             
             try {
                 this.capture = new Capture(0);
+                // this.capture = new KinectCapture(KinectCapture.DeviceType.Kinect, KinectCapture.ImageGeneratorOutputMode.Qvga60Hz);
                 this.capture.ImageGrabbed += UpdateFrame;
+                this.capture.SetCaptureProperty(CAP_PROP.CV_CAP_PROP_FRAME_WIDTH, 1280);
+                this.capture.SetCaptureProperty(CAP_PROP.CV_CAP_PROP_FRAME_HEIGHT, 720);
+                //CvInvoke.cveVideoCaptureSet(this.capture.Ptr, Emgu.CV.CvEnum.CapProp.FrameWidth, 1280);
+                //CvInvoke.cveVideoCaptureSet(this.capture.Ptr, Emgu.CV.CvEnum.CapProp.FrameHeight, 720);
                 this.capture.Start();
+                
                 this.capture.FlipHorizontal = true;
                 Console.WriteLine("Start");
+                Console.WriteLine(this.capture.Height + " : " + this.capture.Width);
 
             } catch (NullReferenceException e) {
                 Console.WriteLine("Error: CameraCapture, " + e.Message);
-                //MessageBox.Show(excpt.Message);
+                MessageBox.Show(e.Message);
             }
         }
 
         private void UpdateFrame(object sender, EventArgs arg) {
-           
-            Mat frame = new Mat();
-            this.capture.Retrieve(frame, 0);
             
-            // get hvs data, and based on hvs'h, convert blue bg to transparent
-            Image<Bgra, Byte> originalImage = frame.ToImage<Bgra, byte>();
-
+            //Mat frame = new Mat();
+            //this.capture.Retrieve(frame, 0);
+            
+            // convert certain color pixel to transparent
+            //Image<Bgr, Byte> originalImage = frame.ToImage<Bgr, byte>();
+            Image<Bgr, Byte> originalImage = this.capture.RetrieveBgrFrame();
+            //byte[,,] test = originalImage.Data;
+            //int i = 1;
             Image<Bgra, Byte> processedImage = this.processTransparent(originalImage,
-                                                                        frame.Width,
-                                                                        frame.Height,
+                                                                        this.capture.Width,
+                                                                        this.capture.Height,
                                                                         this.HighHThresdhold,
                                                                         this.lowHThreshold);
             try {
-                this.mWindow.Dispatcher.Invoke( 
+                this.mWindow.Dispatcher.Invoke(
                     new Action(
                         delegate {
 
@@ -77,71 +91,108 @@ namespace ChromaKeyGame {
                             BitmapSource originalTemp = BitmapSourceConvert.ToBitmapSource(originalImage);
                             BitmapSource processedTemp = BitmapSourceConvert.ToBitmapSource(processedImage);
 
-                            if (originalImage == null || processedTemp == null) {
+                            if (originalImage == null) {
                                 Console.WriteLine("Error, ToBitmapSource Exception");
                                 this.Stop(); 
                                 this.ReleaseData();
                             } else {
 
                                 // display
-                                this.mWindow.BGImage.Source = originalTemp;
-                                this.mWindow.CameraImage.Source = processedTemp;
+                                this.mWindow.CameraImage.Source = originalTemp;
+                                this.mWindow.ProcessedImage.Source = processedTemp;
                             }
                         }),
                         DispatcherPriority.Normal);
             } catch (Exception e) {
-                Console.WriteLine("Error, Show Image" + e.Message);
+                MessageBox.Show("Error, Show Image" + e.Message);
             }
-            //Mat grayFrame = new Mat();
-            //CvInvoke.CvtColor(frame, grayFrame, ColorConversion.Bgr2Gray);
-            //Mat smallGrayFrame = new Mat();
-            //CvInvoke.PyrDown(grayFrame, smallGrayFrame);
-            //Mat smoothedGrayFrame = new Mat();
-            //CvInvoke.PyrUp(smallGrayFrame, smoothedGrayFrame);
-
-            ////Image<Gray, Byte> smallGrayFrame = grayFrame.PyrDown();
-            ////Image<Gray, Byte> smoothedGrayFrame = smallGrayFrame.PyrUp();
-            //Mat cannyFrame = new Mat();
-            //CvInvoke.Canny(smoothedGrayFrame, cannyFrame, 100, 60);
-
-            //Image<Gray, Byte> cannyFrame = smoothedGrayFrame.Canny(100, 60);
-            
-            //captureImageBox.Image = frame;
-            //grayscaleImageBox.Image = grayFrame;
-            //smoothedGrayscaleImageBox.Image = smoothedGrayFrame;
-            //cannyImageBox.Image = cannyFrame;
         }
 
-        private Image<Bgra, Byte> processTransparent(Image<Bgra, Byte> originalImg, int w, int h, int high, int low) {
-            Image<Bgra, Byte> blurImage = new Image<Bgra, byte>(w, h);
-            //blurImage = originalImg;
-            
-            CvInvoke.MedianBlur(originalImg, blurImage, 17);
-            //CvInvoke.GaussianBlur(originalImg, blurImage,  new System.Drawing.Size(7, 7), 13);
+        private Image<Bgra, Byte> processTransparent(Image<Bgr, Byte> originalImg, int w, int h, int high, int low) {
+            // TODO: 增强对比度，增加色彩区别度 ？
+            //       目前使用 blur
+            Image<Bgra, byte> processedImage = null;
+            Image<Bgr, Byte> blurImage = null;
+            Image<Hsv, float> blurImageHSV = null;
+            try {
+                processedImage = originalImg.Convert<Bgra, byte>();
+                blurImage = originalImg.SmoothBlur(11, 11, true);
+                blurImageHSV = blurImage.Convert<Hsv, float>();
+                //CvInvoke.cvSmooth(originalImg, blurImage, SMOOTH_TYPE.CV_BLUR, 9, 9, 0, 0);
+                //blurImage._MorphologyEx(, CV_MORPH_OP.)
+                // TEST
+                //CvInvoke.cvSmooth(blurImage, blurImage2, SMOOTH_TYPE.CV_BLUR, 1, 17, 0, 0);
+                //originalImg.Dilate(10);
+                //CvInvoke.cvSmooth(originalImg, blurImage, SMOOTH_TYPE.CV_GAUSSIAN, 23, 23, 0, 0);
+                //blurImage = blurImage.Dilate(1);
+                //CvInvoke.MedianBlur(originalImg, blurImage, 9);
+                //CvInvoke.GaussianBlur(originalImg, blurImage,  new System.Drawing.Size(7, 7), 13);
+                //CvInvoke.cvCvtColor(blurImage, processedImage, COLOR_CONVERSION.BGR2BGRA);
+                //Image<Bgra, float> ori_float1 = new Image<Bgra, float>(w, h);
+                //Image<Bgr, float> ori_float2 = new Image<Bgr, float>(w, h);
+                //Image<Hsv, float> originalImgHSV = new Image<Hsv, float>(w, h);
+                //CvInvoke.cvConvertScale(blurImage, ori_float1, 1.0, 0);
+                //CvInvoke.CvtColor(ori_float1, ori_float2, Emgu.CV.CvEnum.ColorConversion.Bgra2Bgr);
+                //CvInvoke.CvtColor(ori_float2, originalImgHSV, Emgu.CV.CvEnum.ColorConversion.Bgr2Hsv);
 
-            Image<Bgra, Byte> processedImage = originalImg.Copy();
-            Image<Bgra, float> ori_float1 = new Image<Bgra, float>(w, h);
-            Image<Bgr, float> ori_float2 = new Image<Bgr, float>(w, h);
-            Image<Hsv, float> originalImgHSV = new Image<Hsv, float>(w, h);
-            CvInvoke.cvConvertScale(blurImage, ori_float1, 1.0, 0);
-            CvInvoke.CvtColor(ori_float1, ori_float2, Emgu.CV.CvEnum.ColorConversion.Bgra2Bgr);
-            CvInvoke.CvtColor(ori_float2, originalImgHSV, Emgu.CV.CvEnum.ColorConversion.Bgr2Hsv);
+                for (int i = 0; i < h; i++) {
+                    for (int j = 0; j < w; j++) {
 
-            for (int i = 0; i < 480; i++) {
-                for (int j = 0; j < 640; j++) {
-                    float hValue = originalImgHSV.Data[i, j, 0];
-                    if (hValue > low && hValue < high) {
-                        //image.Data[i, j, 0] = 0;
-                        //image.Data[i, j, 1] = 0;
-                        //image.Data[i, j, 2] = 0;
-                        processedImage.Data[i, j, 3] = 0;
-                        //Console.WriteLine("Change to transparent");
+                        // 1: get hvs data, and based on hvs'h
+                        float hValue = blurImageHSV.Data[i, j, 0];
+                        if (hValue > low && hValue < high) {
+                            //image.Data[i, j, 0] = 0;
+                            //image.Data[i, j, 1] = 0;
+                            //image.Data[i, j, 2] = 0;
+                            processedImage.Data[i, j, 3] = 0;
+                            //Console.WriteLine("Change to transparent");
+                        }
+
+                        // 2: use algorithm to find out certain color pixel
+                        //if(true) {
+                        //    processedImage.Data[i, j, 3] = this.isGreen(blurImage.Data[i, j, 0], blurImage.Data[i, j, 1], blurImage.Data[i, j, 2]);
+                        //    //processedImage.Data[i, j, 3] = this.isGreen(processedImage.Data[i, j, 0], processedImage.Data[i, j, 1], processedImage.Data[i, j, 2]);
+                        //} 
+                     
                     }
-                    //Console.WriteLine(h);
                 }
+                
+            } catch (Exception e) {
+                MessageBox.Show(e.Message);
+            } finally {
+                blurImage.Dispose();
+                blurImageHSV.Dispose();
+                //originalImg.Dispose();
             }
+
             return processedImage;
-            //return blurImage;
+        }
+
+        private byte isGreen(byte bb, byte bg, byte br) {
+            float b = bb / 255f;
+            float g = bg / 255f;
+            float r = br / 255f;
+            float a = 1;
+            // Calculate the average intensity of the texel's red and blue components
+            float rbAverage = (r + b) * 0.75f;
+
+            // Calculate the difference between the green element intensity and the
+            // average of red and blue intensities
+            float gDelta = g - rbAverage;
+
+            // If the green intensity is greater than the average of red and blue
+            // intensities, calculate a transparency value in the range 0.0 to 1.0
+            // based on how much more intense the green element is
+            //a = 1.0f - gDelta > 0.4f ? (gDelta < 1f ? gDelta : 1f) : 0;
+            a = gDelta > 0 ? 0 : 1;
+            return (byte)(a * 255);
+
+            // Use the cube of the of the transparency value. That way, a fragment that
+            // is partially translucent becomes even more translucent. This sharpens
+            // the final result by avoiding almost but not quite opaque fragments that
+            // tend to form halos at color boundaries.
+            // a = a * a * a;
+            // return (byte)(a * 255);
         }
 
         private void UpdateImageElement(BitmapSource temp) {

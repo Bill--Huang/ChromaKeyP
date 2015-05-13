@@ -1,14 +1,17 @@
 ﻿<Window x:Class="ChromaKeyGame.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="MainWindow" Width="900" Height="700" Loaded="Window_Loaded" Closed="Window_Closed">
-    <Grid>
-        <Canvas>
-            <Image Name="BGImage" Width="400" Height="300" Canvas.Left="30" Canvas.Top="30"/>
-            <Image Name="CameraImage" Width="400" Height="300" Canvas.Right="30" Canvas.Top="30"/>
-            <Image Name="Mask" Width="400" Height="300" Canvas.Left="30" Canvas.Bottom="30"/>
-        </Canvas>
+        Title="MainWindow" WindowState="Maximized" Width="1920" Height="1080" Loaded="Window_Loaded" Closed="Window_Closed">
+    <Viewbox Stretch="Fill">
+        <Grid Background="Black">
+            <Canvas Width="1920" Height="1080">
+                <!--<Image Name="bg" Source="resources/blue.jpg" Stretch="Fill"  Width="1920" Height="1080"/>-->
+                <Image Name="ProcessedImage" Width="1920" Height="1080"/>
+                <Image Name="CameraImage" Width="400" Height="300" Canvas.Left="10" Canvas.Top="10" />
+
+            </Canvas>
 
 
-    </Grid>
+        </Grid>
+    </Viewbox>
 </Window>
